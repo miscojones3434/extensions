@@ -41,6 +41,18 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Checkout CloudStream Gradle plugin
+        uses: actions/checkout@master
+        with:
+          repository: recloudstream/gradle
+          path: cloudstream-gradle
+
+      - name: Build CloudStream Gradle plugin
+        run: |
+          cd $GITHUB_WORKSPACE/cloudstream-gradle
+          chmod +x gradlew
+          ./gradlew publishToMavenLocal
+
       - name: Build Plugins
         run: |
           cd $GITHUB_WORKSPACE/src
