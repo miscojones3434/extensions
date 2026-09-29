@@ -1,4 +1,11 @@
-// Use an integer for version numbers
+dependencies {
+    val cloudstream by configurations
+
+    cloudstream("com.lagradost:cloudstream3:pre-release")
+
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+}
+
 version = 2
 
 cloudstream {
