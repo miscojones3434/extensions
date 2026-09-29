@@ -1,0 +1,8 @@
+{
+  "name": "PATRIARCA v2",
+  "description": "CloudStream extensions by PATRIARCA",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/miscojones3434/extensions/builds/plugins.json?v=2"
+  ]
+}
