@@ -1,8 +1,8 @@
 {
-    "name": "Cloudstream providers repository",
-    "description": "Cloudstream extension Repository",
-    "manifestVersion": 1,
-    "pluginLists": [
-      "https://raw.githubusercontent.com/recloudstream/extensions/builds/plugins.json"
-    ]
+  "name": "PATRIARCA Extensions",
+  "description": "CloudStream extensions by PATRIARCA",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/miscojones3434/extensions/builds/plugins.json"
+  ]
 }
