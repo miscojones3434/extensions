@@ -1,0 +1,8 @@
+{
+  "name": "PATRIARCA MOVISTAR",
+  "description": "Movistar Plus+ para CloudStream",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/miscojones3434/extensions/master/movistar-plugins.json"
+  ]
+}

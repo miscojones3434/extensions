@@ -1,0 +1,24 @@
+[
+  {
+    "iconUrl": "https://www.google.com/s2/favicons?domain=movistarplus.es&sz=%size%",
+    "fileHash": "sha256-3f055ef6cd2d017573d46734d3be8f1a8439e358865b6398851c5a2a7929848f",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/miscojones3434/extensions",
+    "fileSize": 49146,
+    "status": 3,
+    "authors": [
+      "PATRIARCA"
+    ],
+    "tvTypes": [
+      "Live",
+      "Movie",
+      "TvSeries",
+      "Documentary"
+    ],
+    "version": 3,
+    "internalName": "MovistarPlus",
+    "description": "Movistar Plus+ España",
+    "url": "https://github.com/miscojones3434/extensions/raw/refs/heads/builds/MovistarPlus.cs3",
+    "name": "MovistarPlus"
+  }
+]
