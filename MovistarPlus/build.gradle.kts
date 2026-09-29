@@ -6,7 +6,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }
 
-version = 2
+version = 3
 
 cloudstream {
     description = "Movistar Plus+ España"

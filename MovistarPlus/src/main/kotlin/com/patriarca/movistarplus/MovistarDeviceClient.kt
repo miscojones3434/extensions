@@ -8,12 +8,19 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 object MovistarDeviceClient {
 
+    var lastError: String = ""
+        private set
+
     suspend fun prepareDevice(): Boolean {
+        lastError = ""
+
         if (!MovistarSessionManager.isAuthenticated) {
+            lastError = "DISPOSITIVO: no autenticado"
             return false
         }
 
         if (MovistarSessionManager.accountNumber.isBlank()) {
+            lastError = "DISPOSITIVO: accountNumber vacío"
             return false
         }
 
@@ -24,7 +31,9 @@ object MovistarDeviceClient {
             MovistarSessionManager.setDevice(deviceId)
         }
 
-        registerDevice()
+        if (!registerDevice()) {
+            return false
+        }
 
         return initializeSession()
     }
@@ -40,16 +49,26 @@ object MovistarDeviceClient {
                 )
         )
 
+        if (response.code !in 200..299) {
+            lastError = "DEVICE ID HTTP ${response.code}"
+            return null
+        }
+
         return response.text
             .trim()
             .trim('"')
             .takeIf { it.isNotBlank() }
+            ?: run {
+                lastError = "DEVICE ID: respuesta vacía"
+                null
+            }
     }
 
     private suspend fun registerDevice(): Boolean {
         val deviceId = MovistarSessionManager.deviceId
 
         if (deviceId.isBlank()) {
+            lastError = "REGISTRO: deviceId vacío"
             return false
         }
 
@@ -68,11 +87,17 @@ object MovistarDeviceClient {
             headers = headers
         )
 
-        return response.code in 200..299
+        if (response.code !in 200..299) {
+            lastError = "REGISTRO HTTP ${response.code}"
+            return false
+        }
+
+        return true
     }
 
     suspend fun initializeSession(): Boolean {
         if (!MovistarSessionManager.isInitialized) {
+            lastError = "INITDATA: sesión incompleta"
             return false
         }
 
@@ -108,14 +133,28 @@ object MovistarDeviceClient {
             headers = headers
         )
 
+        if (response.code !in 200..299) {
+            lastError = "INITDATA HTTP ${response.code}"
+            return false
+        }
+
         val data =
             tryParseJson<MovistarInitDataResponse>(
                 response.text
-            ) ?: return false
+            )
+
+        if (data == null) {
+            lastError = "INITDATA: respuesta no válida"
+            return false
+        }
 
         val accessToken = data.accessToken
             ?.takeIf { it.isNotBlank() }
-            ?: return false
+
+        if (accessToken == null) {
+            lastError = "INITDATA: accessToken ausente"
+            return false
+        }
 
         MovistarSessionManager.setPlaybackSession(
             accessToken = accessToken,

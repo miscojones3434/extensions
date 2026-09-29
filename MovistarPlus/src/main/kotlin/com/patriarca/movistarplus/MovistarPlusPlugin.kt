@@ -76,6 +76,7 @@ class MovistarPlusPlugin : Plugin() {
                 padding,
                 0
             )
+
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -85,6 +86,7 @@ class MovistarPlusPlugin : Plugin() {
         val usernameField = EditText(context).apply {
             hint = "Usuario / correo de Movistar Plus+"
             setSingleLine(true)
+
             inputType =
                 InputType.TYPE_CLASS_TEXT or
                     InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
@@ -100,6 +102,7 @@ class MovistarPlusPlugin : Plugin() {
         val passwordField = EditText(context).apply {
             hint = "Contraseña"
             setSingleLine(true)
+
             inputType =
                 InputType.TYPE_CLASS_TEXT or
                     InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -189,14 +192,21 @@ class MovistarPlusPlugin : Plugin() {
                             password = password
                         )
 
+                        val message =
+                            if (connected) {
+                                "Movistar Plus+ conectado"
+                            } else {
+                                MovistarAuthClient.lastError
+                                    .takeIf { it.isNotBlank() }
+                                    ?: MovistarDeviceClient.lastError
+                                        .takeIf { it.isNotBlank() }
+                                    ?: "No se pudo iniciar sesión"
+                            }
+
                         withContext(Dispatchers.Main) {
                             Toast.makeText(
                                 context,
-                                if (connected) {
-                                    "Movistar Plus+ conectado"
-                                } else {
-                                    "No se pudo iniciar sesión"
-                                },
+                                message,
                                 Toast.LENGTH_LONG
                             ).show()
                         }
@@ -231,7 +241,6 @@ class MovistarPlusPlugin : Plugin() {
         username: String,
         password: String
     ): Boolean {
-
         MovistarSessionManager.clear()
 
         val authenticated =
@@ -240,7 +249,7 @@ class MovistarPlusPlugin : Plugin() {
                     username = username,
                     password = password
                 )
-            } catch (_: Throwable) {
+            } catch (t: Throwable) {
                 false
             }
 
@@ -250,7 +259,7 @@ class MovistarPlusPlugin : Plugin() {
 
         return try {
             MovistarDeviceClient.prepareDevice()
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
             false
         }
     }
