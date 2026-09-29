@@ -15,18 +15,18 @@ import com.lagradost.cloudstream3.newLiveStreamLoadResponse
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.newExtractorLink
 
 class MovistarPlusProvider : MainAPI() {
 
-    override var mainUrl = MovistarApi.WEB_URL
+    override var mainUrl = "http://192.168.1.149"
     override var name = "Movistar Plus+"
     override var lang = "es"
 
     override val supportedTypes = setOf(
-        TvType.Live,
-        TvType.Movie,
-        TvType.TvSeries,
-        TvType.Documentary
+        TvType.Live
     )
 
     override val hasMainPage = true
@@ -36,24 +36,19 @@ class MovistarPlusProvider : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
 
-        if (!MovistarSessionManager.isInitialized) {
-            return newHomePageResponse(
-                emptyList(),
-                hasNext = false
-            )
-        }
+        val channels =
+            VuPlusClient.getMovistarChannels()
 
-        val channels = MovistarChannelsClient.getChannels()
-
-        val liveItems = channels.map { channel ->
-            channel.toSearchResponse()
-        }
+        val items =
+            channels.map { channel ->
+                channel.toSearchResponse()
+            }
 
         return newHomePageResponse(
             listOf(
                 HomePageList(
-                    name = "En directo",
-                    list = liveItems,
+                    name = "Movistar Plus+",
+                    list = items,
                     isHorizontalImages = false
                 )
             ),
@@ -65,20 +60,16 @@ class MovistarPlusProvider : MainAPI() {
         query: String
     ): List<SearchResponse> {
 
-        if (!MovistarSessionManager.isInitialized) {
-            return emptyList()
-        }
-
-        return MovistarChannelsClient
-            .getChannels()
-            .filter {
-                it.name.contains(
+        return VuPlusClient
+            .getMovistarChannels()
+            .filter { channel ->
+                channel.name.contains(
                     query,
                     ignoreCase = true
                 )
             }
-            .map {
-                it.toSearchResponse()
+            .map { channel ->
+                channel.toSearchResponse()
             }
     }
 
@@ -86,37 +77,20 @@ class MovistarPlusProvider : MainAPI() {
         url: String
     ): LoadResponse? {
 
-        val data =
-            tryParseJson<MovistarPlaybackData>(url)
-                ?: return null
-
         val channel =
-            MovistarChannelsClient
-                .getChannels()
-                .firstOrNull {
-                    it.id == data.contentId
-                }
-
-        val title = channel?.let {
-            if (it.dial.isNotBlank()) {
-                "${it.dial}. ${it.name}"
-            } else {
-                it.name
-            }
-        } ?: data.contentId
+            tryParseJson<VuPlusClient.Channel>(
+                url
+            ) ?: return null
 
         return newLiveStreamLoadResponse(
-            title,
+            channel.name,
             url,
             url
         ) {
-            posterUrl = channel?.logoUrl
-
-            tags = listOfNotNull(
+            tags = listOf(
                 "Movistar Plus+",
-                channel?.dial
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { "Dial $it" }
+                "Vu+",
+                "En directo"
             )
         }
     }
@@ -127,33 +101,38 @@ class MovistarPlusProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        return false
-    }
 
-    private fun MovistarChannelsClient.Channel
-        .toSearchResponse(): LiveSearchResponse {
+        val channel =
+            tryParseJson<VuPlusClient.Channel>(
+                data
+            ) ?: return false
 
-        val playbackData = MovistarPlaybackData(
-            contentId = id,
-            streamType = "CHN",
-            url = playbackUrl,
-            drmMediaId = casId
+        if (channel.streamUrl.isBlank()) {
+            return false
+        }
+
+        callback(
+            newExtractorLink(
+                source = "Vu+",
+                name = channel.name,
+                url = channel.streamUrl,
+                type = ExtractorLinkType.VIDEO
+            ) {
+                quality = Qualities.Unknown.value
+            }
         )
 
-        val title =
-            if (dial.isNotBlank()) {
-                "$dial. $name"
-            } else {
-                name
-            }
+        return true
+    }
+
+    private fun VuPlusClient.Channel
+        .toSearchResponse(): LiveSearchResponse {
 
         return newLiveSearchResponse(
-            title,
-            playbackData.toJson(),
+            name,
+            toJson(),
             TvType.Live,
             fix = false
-        ) {
-            posterUrl = logoUrl
-        }
+        )
     }
 }
