@@ -9,7 +9,9 @@ import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.newHomePageResponse
+import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.loadExtractor
 
 class PATRIARCATVProvider : MainAPI() {
 
@@ -156,7 +158,25 @@ class PATRIARCATVProvider : MainAPI() {
     override suspend fun load(
         url: String
     ): LoadResponse? {
-        return null
+
+        if (url.startsWith("patriarcatv://alfa/")) {
+            return null
+        }
+
+        val movie =
+            PelisForteAdapter.loadMovie(url)
+                ?: return null
+
+        return newMovieLoadResponse(
+            name = movie.title,
+            url = movie.url,
+            type = TvType.Movie,
+            dataUrl = movie.url
+        ) {
+            posterUrl = movie.posterUrl
+            year = movie.year
+            plot = movie.plot
+        }
     }
 
     override suspend fun loadLinks(
@@ -165,7 +185,28 @@ class PATRIARCATVProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        return false
+
+        val movie =
+            PelisForteAdapter.loadMovie(data)
+                ?: return false
+
+        var loaded = false
+
+        movie.playerUrls.forEach { playerUrl ->
+
+            try {
+                loadExtractor(
+                    playerUrl,
+                    subtitleCallback,
+                    callback
+                )
+
+                loaded = true
+            } catch (_: Throwable) {
+            }
+        }
+
+        return loaded
     }
 
     private fun addCatalogSection(

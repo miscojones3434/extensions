@@ -9,8 +9,7 @@ import java.net.URLEncoder
 
 object PelisForteAdapter {
 
-    private const val BASE_URL =
-        "https://www2.pelisforte.se"
+    private const val BASE_URL = "https://www2.pelisforte.se"
 
     data class MovieItem(
         val title: String,
@@ -19,167 +18,174 @@ object PelisForteAdapter {
         val year: Int?
     )
 
-    suspend fun getLatest(
-        api: MainAPI
-    ): List<SearchResponse> {
-        return getMovies(
-            "$BASE_URL/pelicula"
-        ).map { movie ->
-            movie.toSearchResponse(api)
-        }
-    }
+    data class MovieDetails(
+        val title: String,
+        val url: String,
+        val posterUrl: String?,
+        val year: Int?,
+        val plot: String?,
+        val playerUrls: List<String>
+    )
 
-    suspend fun getCastellano(
-        api: MainAPI
-    ): List<SearchResponse> {
-        return getMovies(
-            "$BASE_URL/pelis/idiomas/castellano"
-        ).map { movie ->
-            movie.toSearchResponse(api)
-        }
-    }
+    suspend fun getLatest(api: MainAPI): List<SearchResponse> =
+        getMovies("$BASE_URL/pelicula")
+            .map { it.toSearchResponse(api) }
 
-    suspend fun getLatino(
-        api: MainAPI
-    ): List<SearchResponse> {
-        return getMovies(
-            "$BASE_URL/pelis/idiomas/espanol-latino"
-        ).map { movie ->
-            movie.toSearchResponse(api)
-        }
-    }
+    suspend fun getCastellano(api: MainAPI): List<SearchResponse> =
+        getMovies("$BASE_URL/pelis/idiomas/castellano")
+            .map { it.toSearchResponse(api) }
 
-    suspend fun getVose(
-        api: MainAPI
-    ): List<SearchResponse> {
-        return getMovies(
-            "$BASE_URL/pelis/idiomas/subtituladas-p02"
-        ).map { movie ->
-            movie.toSearchResponse(api)
-        }
-    }
+    suspend fun getLatino(api: MainAPI): List<SearchResponse> =
+        getMovies("$BASE_URL/pelis/idiomas/espanol-latino")
+            .map { it.toSearchResponse(api) }
+
+    suspend fun getVose(api: MainAPI): List<SearchResponse> =
+        getMovies("$BASE_URL/pelis/idiomas/subtituladas-p02")
+            .map { it.toSearchResponse(api) }
 
     suspend fun search(
         api: MainAPI,
         query: String
     ): List<SearchResponse> {
 
-        if (query.isBlank()) {
-            return emptyList()
+        if (query.isBlank()) return emptyList()
+
+        val encoded = URLEncoder.encode(
+            query.trim(),
+            Charsets.UTF_8.name()
+        )
+
+        return getMovies("$BASE_URL/page/1?s=$encoded")
+            .map { it.toSearchResponse(api) }
+    }
+
+    suspend fun loadMovie(
+        url: String
+    ): MovieDetails? {
+
+        val document = try {
+            app.get(url).document
+        } catch (_: Throwable) {
+            return null
         }
 
-        val encoded =
-            URLEncoder.encode(
-                query.trim(),
-                Charsets.UTF_8.name()
-            )
+        val title =
+            document.selectFirst("h1")
+                ?.text()
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: document.selectFirst("meta[property=og:title]")
+                    ?.attr("content")
+                    ?.trim()
+                ?: return null
 
-        return getMovies(
-            "$BASE_URL/page/1?s=$encoded"
-        ).map { movie ->
-            movie.toSearchResponse(api)
-        }
+        val poster =
+            document.selectFirst("meta[property=og:image]")
+                ?.attr("content")
+                ?.takeIf { it.isNotBlank() }
+                ?: document.selectFirst("img")
+                    ?.attr("src")
+                    ?.takeIf { it.isNotBlank() }
+
+        val description =
+            document.selectFirst("meta[name=description]")
+                ?.attr("content")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+
+        val year =
+            Regex("""\b(19|20)\d{2}\b""")
+                .find(document.text())
+                ?.value
+                ?.toIntOrNull()
+
+        val player =
+            document.selectFirst("section.player")
+
+        val urls =
+            player
+                ?.select("iframe")
+                ?.mapNotNull { iframe ->
+                    val raw =
+                        iframe.attr("data-src")
+                            .ifBlank { iframe.attr("src") }
+                            .trim()
+
+                    if (raw.isBlank()) {
+                        null
+                    } else {
+                        normalizeUrl(
+                            raw.replace("?h=", "r.php?h=")
+                        )
+                    }
+                }
+                ?.distinct()
+                ?: emptyList()
+
+        return MovieDetails(
+            title = title,
+            url = url,
+            posterUrl = poster?.let(::normalizeUrl),
+            year = year,
+            plot = description,
+            playerUrls = urls
+        )
     }
 
     private suspend fun getMovies(
         url: String
     ): List<MovieItem> {
 
-        val response =
-            try {
-                app.get(url)
-            } catch (_: Throwable) {
-                return emptyList()
-            }
-
-        if (response.code !in 200..299) {
+        val document = try {
+            app.get(url).document
+        } catch (_: Throwable) {
             return emptyList()
         }
 
-        val html = response.text
+        return document
+            .select("ul.post-lst li[class^=post-]")
+            .mapNotNull { item ->
 
-        val itemRegex = Regex(
-            """<li[^>]+class=["'][^"']*post-\d+[^"']*["'][^>]*>(.*?)</li>""",
-            setOf(
-                RegexOption.IGNORE_CASE,
-                RegexOption.DOT_MATCHES_ALL
-            )
-        )
-
-        return itemRegex
-            .findAll(html)
-            .mapNotNull { match ->
-
-                val block =
-                    match.groupValues[1]
-
-                val pageUrl =
-                    Regex(
-                        """<a[^>]+href=["']([^"']+)["']""",
-                        RegexOption.IGNORE_CASE
-                    )
-                        .find(block)
-                        ?.groupValues
-                        ?.getOrNull(1)
+                val link =
+                    item.selectFirst("a[href]")
+                        ?.attr("href")
                         ?.trim()
                         ?.takeIf { it.isNotBlank() }
                         ?: return@mapNotNull null
 
                 val title =
-                    Regex(
-                        """<h2[^>]*>(.*?)</h2>""",
-                        setOf(
-                            RegexOption.IGNORE_CASE,
-                            RegexOption.DOT_MATCHES_ALL
-                        )
-                    )
-                        .find(block)
-                        ?.groupValues
-                        ?.getOrNull(1)
-                        ?.let(::cleanText)
+                    item.selectFirst("h2")
+                        ?.text()
+                        ?.trim()
                         ?.takeIf { it.isNotBlank() }
                         ?: return@mapNotNull null
 
                 val poster =
-                    Regex(
-                        """<img[^>]+(?:src|data-src)=["']([^"']+)["']""",
-                        RegexOption.IGNORE_CASE
-                    )
-                        .find(block)
-                        ?.groupValues
-                        ?.getOrNull(1)
+                    item.selectFirst("img")
+                        ?.attr("src")
                         ?.trim()
+                        ?.takeIf { it.isNotBlank() }
 
                 val year =
-                    Regex(
-                        """<span[^>]+class=["'][^"']*year[^"']*["'][^>]*>(.*?)</span>""",
-                        setOf(
-                            RegexOption.IGNORE_CASE,
-                            RegexOption.DOT_MATCHES_ALL
-                        )
-                    )
-                        .find(block)
-                        ?.groupValues
-                        ?.getOrNull(1)
-                        ?.let(::cleanText)
-                        ?.filter { it.isDigit() }
-                        ?.takeIf { it.length == 4 }
+                    item.selectFirst("span.year")
+                        ?.text()
+                        ?.trim()
                         ?.toIntOrNull()
 
                 MovieItem(
                     title = title,
-                    url = normalizeUrl(pageUrl),
+                    url = normalizeUrl(link),
                     posterUrl = poster?.let(::normalizeUrl),
                     year = year
                 )
             }
             .distinctBy { it.url }
-            .toList()
     }
 
     private fun MovieItem.toSearchResponse(
         api: MainAPI
     ): SearchResponse {
+
         return api.newMovieSearchResponse(
             name = title,
             url = url,
@@ -193,6 +199,7 @@ object PelisForteAdapter {
     private fun normalizeUrl(
         value: String
     ): String {
+
         return when {
             value.startsWith("//") ->
                 "https:$value"
@@ -203,21 +210,5 @@ object PelisForteAdapter {
             else ->
                 value
         }
-    }
-
-    private fun cleanText(
-        value: String
-    ): String {
-        return value
-            .replace(
-                Regex("<[^>]+>"),
-                ""
-            )
-            .replace("&amp;", "&")
-            .replace("&#8217;", "'")
-            .replace("&#039;", "'")
-            .replace("&quot;", "\"")
-            .replace("&nbsp;", " ")
-            .trim()
     }
 }
