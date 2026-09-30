@@ -39,7 +39,7 @@ class PATRIARCATVProvider : MainAPI() {
         val sections = mutableListOf<HomePageList>()
 
         val pelisForteLatest =
-            PelisForteAdapter.getLatest()
+            PelisForteAdapter.getLatest(this)
 
         if (pelisForteLatest.isNotEmpty()) {
             sections.add(
@@ -52,7 +52,7 @@ class PATRIARCATVProvider : MainAPI() {
         }
 
         val pelisForteCastellano =
-            PelisForteAdapter.getCastellano()
+            PelisForteAdapter.getCastellano(this)
 
         if (pelisForteCastellano.isNotEmpty()) {
             sections.add(
@@ -65,7 +65,7 @@ class PATRIARCATVProvider : MainAPI() {
         }
 
         val pelisForteLatino =
-            PelisForteAdapter.getLatino()
+            PelisForteAdapter.getLatino(this)
 
         if (pelisForteLatino.isNotEmpty()) {
             sections.add(
@@ -78,7 +78,7 @@ class PATRIARCATVProvider : MainAPI() {
         }
 
         val pelisForteVose =
-            PelisForteAdapter.getVose()
+            PelisForteAdapter.getVose(this)
 
         if (pelisForteVose.isNotEmpty()) {
             sections.add(
@@ -140,11 +140,11 @@ class PATRIARCATVProvider : MainAPI() {
             mutableListOf<SearchResponse>()
 
         results.addAll(
-            PelisForteAdapter.search(query)
+            PelisForteAdapter.search(this, query)
         )
 
         results.addAll(
-            AlfaCatalogAdapter.search(query)
+            AlfaCatalogAdapter.search(this, query)
         )
 
         return results
@@ -176,6 +176,7 @@ class PATRIARCATVProvider : MainAPI() {
 
         val items =
             AlfaCatalogAdapter.getByCategory(
+                this,
                 category
             )
 

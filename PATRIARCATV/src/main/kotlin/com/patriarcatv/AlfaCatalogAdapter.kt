@@ -1,5 +1,6 @@
 package com.patriarcatv
 
+import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.newMovieSearchResponse
@@ -7,6 +8,7 @@ import com.lagradost.cloudstream3.newMovieSearchResponse
 object AlfaCatalogAdapter {
 
     fun getByCategory(
+        api: MainAPI,
         category: AlfaChannelCatalog.Category
     ): List<SearchResponse> {
 
@@ -15,11 +17,12 @@ object AlfaCatalogAdapter {
                 channel.category == category
             }
             .map { channel ->
-                channel.toSearchResponse()
+                channel.toSearchResponse(api)
             }
     }
 
     fun search(
+        api: MainAPI,
         query: String
     ): List<SearchResponse> {
 
@@ -38,14 +41,14 @@ object AlfaCatalogAdapter {
                 )
             }
             .map { channel ->
-                channel.toSearchResponse()
+                channel.toSearchResponse(api)
             }
     }
 
     private fun AlfaChannelCatalog.ChannelDefinition
-        .toSearchResponse(): SearchResponse {
+        .toSearchResponse(api: MainAPI): SearchResponse {
 
-        return newMovieSearchResponse(
+        return api.newMovieSearchResponse(
             name = title,
             url = buildChannelUrl(id),
             type = TvType.Others

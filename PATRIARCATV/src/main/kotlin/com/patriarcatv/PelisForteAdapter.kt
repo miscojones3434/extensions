@@ -1,5 +1,6 @@
 package com.patriarcatv
 
+import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.app
@@ -18,39 +19,48 @@ object PelisForteAdapter {
         val year: Int?
     )
 
-    suspend fun getLatest(): List<SearchResponse> {
+    suspend fun getLatest(
+        api: MainAPI
+    ): List<SearchResponse> {
         return getMovies(
             "$BASE_URL/pelicula"
         ).map { movie ->
-            movie.toSearchResponse()
+            movie.toSearchResponse(api)
         }
     }
 
-    suspend fun getCastellano(): List<SearchResponse> {
+    suspend fun getCastellano(
+        api: MainAPI
+    ): List<SearchResponse> {
         return getMovies(
             "$BASE_URL/pelis/idiomas/castellano"
         ).map { movie ->
-            movie.toSearchResponse()
+            movie.toSearchResponse(api)
         }
     }
 
-    suspend fun getLatino(): List<SearchResponse> {
+    suspend fun getLatino(
+        api: MainAPI
+    ): List<SearchResponse> {
         return getMovies(
             "$BASE_URL/pelis/idiomas/espanol-latino"
         ).map { movie ->
-            movie.toSearchResponse()
+            movie.toSearchResponse(api)
         }
     }
 
-    suspend fun getVose(): List<SearchResponse> {
+    suspend fun getVose(
+        api: MainAPI
+    ): List<SearchResponse> {
         return getMovies(
             "$BASE_URL/pelis/idiomas/subtituladas-p02"
         ).map { movie ->
-            movie.toSearchResponse()
+            movie.toSearchResponse(api)
         }
     }
 
     suspend fun search(
+        api: MainAPI,
         query: String
     ): List<SearchResponse> {
 
@@ -67,7 +77,7 @@ object PelisForteAdapter {
         return getMovies(
             "$BASE_URL/page/1?s=$encoded"
         ).map { movie ->
-            movie.toSearchResponse()
+            movie.toSearchResponse(api)
         }
     }
 
@@ -167,8 +177,10 @@ object PelisForteAdapter {
             .toList()
     }
 
-    private fun MovieItem.toSearchResponse(): SearchResponse {
-        return newMovieSearchResponse(
+    private fun MovieItem.toSearchResponse(
+        api: MainAPI
+    ): SearchResponse {
+        return api.newMovieSearchResponse(
             name = title,
             url = url,
             type = TvType.Movie
