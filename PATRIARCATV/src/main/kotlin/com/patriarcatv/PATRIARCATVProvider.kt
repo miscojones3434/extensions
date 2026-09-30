@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
@@ -15,22 +16,26 @@ import com.lagradost.cloudstream3.utils.loadExtractor
 
 class PATRIARCATVProvider : MainAPI() {
 
-    override var name =
-        "PATRIARCATV"
+    override var name = "PATRIARCATV"
 
     override var mainUrl =
         "https://www2.pelisforte.se"
 
-    override var lang =
-        "es"
+    override var lang = "es"
 
     override val supportedTypes =
         setOf(
             TvType.Movie
         )
 
-    override val hasMainPage =
-        true
+    override val hasMainPage = true
+
+    override val mainPage = mainPageOf(
+        "$mainUrl/pelicula" to "PelisForte · Novedades",
+        "$mainUrl/pelis/idiomas/castellano" to "PelisForte · Castellano",
+        "$mainUrl/pelis/idiomas/espanol-latino" to "PelisForte · Latino",
+        "$mainUrl/pelis/idiomas/subtituladas-p02" to "PelisForte · VOSE"
+    )
 
     override suspend fun getMainPage(
         page: Int,
@@ -40,82 +45,53 @@ class PATRIARCATVProvider : MainAPI() {
         val realPage =
             if (page < 1) 1 else page
 
-        val sections =
-            mutableListOf<HomePageList>()
+        val items =
+            when (request.name) {
 
-        val latest =
-            PelisForteAdapter.getLatest(
-                this,
-                realPage
-            )
+                "PelisForte · Castellano" ->
+                    PelisForteAdapter.getCastellano(
+                        this,
+                        realPage
+                    )
 
-        if (latest.isNotEmpty()) {
-            sections.add(
-                HomePageList(
-                    name = "PelisForte · Novedades",
-                    list = latest,
-                    isHorizontalImages = true
-                )
-            )
-        }
+                "PelisForte · Latino" ->
+                    PelisForteAdapter.getLatino(
+                        this,
+                        realPage
+                    )
 
-        val castellano =
-            PelisForteAdapter.getCastellano(
-                this,
-                realPage
-            )
+                "PelisForte · VOSE" ->
+                    PelisForteAdapter.getVose(
+                        this,
+                        realPage
+                    )
 
-        if (castellano.isNotEmpty()) {
-            sections.add(
-                HomePageList(
-                    name = "PelisForte · Castellano",
-                    list = castellano,
-                    isHorizontalImages = true
-                )
-            )
-        }
-
-        val latino =
-            PelisForteAdapter.getLatino(
-                this,
-                realPage
-            )
-
-        if (latino.isNotEmpty()) {
-            sections.add(
-                HomePageList(
-                    name = "PelisForte · Latino",
-                    list = latino,
-                    isHorizontalImages = true
-                )
-            )
-        }
-
-        val vose =
-            PelisForteAdapter.getVose(
-                this,
-                realPage
-            )
-
-        if (vose.isNotEmpty()) {
-            sections.add(
-                HomePageList(
-                    name = "PelisForte · VOSE",
-                    list = vose,
-                    isHorizontalImages = true
-                )
-            )
-        }
+                else ->
+                    PelisForteAdapter.getLatest(
+                        this,
+                        realPage
+                    )
+            }
 
         return newHomePageResponse(
-            sections,
-            hasNext = sections.isNotEmpty()
+            listOf(
+                HomePageList(
+                    name = request.name,
+                    list = items,
+                    isHorizontalImages = true
+                )
+            ),
+            hasNext = items.isNotEmpty()
         )
     }
 
     override suspend fun search(
         query: String
     ): List<SearchResponse> {
+
+        if (query.isBlank()) {
+            return emptyList()
+        }
 
         return PelisForteAdapter.search(
             this,
@@ -137,22 +113,16 @@ class PATRIARCATVProvider : MainAPI() {
             TvType.Movie,
             movie.url
         ) {
-
-            posterUrl =
-                movie.posterUrl
-
-            year =
-                movie.year
+            posterUrl = movie.posterUrl
+            year = movie.year
         }
     }
 
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
-        subtitleCallback:
-            (SubtitleFile) -> Unit,
-        callback:
-            (ExtractorLink) -> Unit
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
     ): Boolean {
 
         val movie =
@@ -163,14 +133,12 @@ class PATRIARCATVProvider : MainAPI() {
             return false
         }
 
-        var found =
-            false
+        var found = false
 
         for (player in movie.players) {
 
             val resolved =
-                PelisForteAdapter
-                    .resolvePlayer(player)
+                PelisForteAdapter.resolvePlayer(player)
                     ?: continue
 
             try {
