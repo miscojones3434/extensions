@@ -15,122 +15,101 @@ import com.lagradost.cloudstream3.utils.loadExtractor
 
 class PATRIARCATVProvider : MainAPI() {
 
-    override var name = "PATRIARCATV"
+    override var name =
+        "PATRIARCATV"
 
     override var mainUrl =
         "https://www2.pelisforte.se"
 
-    override var lang = "es"
+    override var lang =
+        "es"
 
-    override val supportedTypes = setOf(
-        TvType.Movie,
-        TvType.TvSeries,
-        TvType.Anime,
-        TvType.Cartoon,
-        TvType.Documentary,
-        TvType.Others
-    )
+    override val supportedTypes =
+        setOf(
+            TvType.Movie
+        )
 
-    override val hasMainPage = true
+    override val hasMainPage =
+        true
 
     override suspend fun getMainPage(
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
 
-        val sections = mutableListOf<HomePageList>()
+        val realPage =
+            if (page < 1) 1 else page
 
-        val pelisForteLatest =
-            PelisForteAdapter.getLatest(this)
+        val sections =
+            mutableListOf<HomePageList>()
 
-        if (pelisForteLatest.isNotEmpty()) {
+        val latest =
+            PelisForteAdapter.getLatest(
+                this,
+                realPage
+            )
+
+        if (latest.isNotEmpty()) {
             sections.add(
                 HomePageList(
                     name = "PelisForte · Novedades",
-                    list = pelisForteLatest,
+                    list = latest,
                     isHorizontalImages = true
                 )
             )
         }
 
-        val pelisForteCastellano =
-            PelisForteAdapter.getCastellano(this)
+        val castellano =
+            PelisForteAdapter.getCastellano(
+                this,
+                realPage
+            )
 
-        if (pelisForteCastellano.isNotEmpty()) {
+        if (castellano.isNotEmpty()) {
             sections.add(
                 HomePageList(
                     name = "PelisForte · Castellano",
-                    list = pelisForteCastellano,
+                    list = castellano,
                     isHorizontalImages = true
                 )
             )
         }
 
-        val pelisForteLatino =
-            PelisForteAdapter.getLatino(this)
+        val latino =
+            PelisForteAdapter.getLatino(
+                this,
+                realPage
+            )
 
-        if (pelisForteLatino.isNotEmpty()) {
+        if (latino.isNotEmpty()) {
             sections.add(
                 HomePageList(
                     name = "PelisForte · Latino",
-                    list = pelisForteLatino,
+                    list = latino,
                     isHorizontalImages = true
                 )
             )
         }
 
-        val pelisForteVose =
-            PelisForteAdapter.getVose(this)
+        val vose =
+            PelisForteAdapter.getVose(
+                this,
+                realPage
+            )
 
-        if (pelisForteVose.isNotEmpty()) {
+        if (vose.isNotEmpty()) {
             sections.add(
                 HomePageList(
                     name = "PelisForte · VOSE",
-                    list = pelisForteVose,
+                    list = vose,
                     isHorizontalImages = true
                 )
             )
         }
 
-        addCatalogSection(
-            sections = sections,
-            title = "Fuentes de Películas",
-            category = AlfaChannelCatalog.Category.MOVIES
-        )
-
-        addCatalogSection(
-            sections = sections,
-            title = "Fuentes de Series",
-            category = AlfaChannelCatalog.Category.SERIES
-        )
-
-        addCatalogSection(
-            sections = sections,
-            title = "Fuentes de Anime",
-            category = AlfaChannelCatalog.Category.ANIME
-        )
-
-        addCatalogSection(
-            sections = sections,
-            title = "Fuentes de Documentales",
-            category = AlfaChannelCatalog.Category.DOCUMENTARIES
-        )
-
-        addCatalogSection(
-            sections = sections,
-            title = "Fuentes Asiáticas",
-            category = AlfaChannelCatalog.Category.ASIAN
-        )
-
-        addCatalogSection(
-            sections = sections,
-            title = "Fuentes de Dibujos",
-            category = AlfaChannelCatalog.Category.CARTOONS
-        )
-
         return newHomePageResponse(
             sections,
-            hasNext = false
+            hasNext = sections.isNotEmpty()
         )
     }
 
@@ -138,97 +117,77 @@ class PATRIARCATVProvider : MainAPI() {
         query: String
     ): List<SearchResponse> {
 
-        val results =
-            mutableListOf<SearchResponse>()
-
-        results.addAll(
-            PelisForteAdapter.search(this, query)
+        return PelisForteAdapter.search(
+            this,
+            query
         )
-
-        results.addAll(
-            AlfaCatalogAdapter.search(this, query)
-        )
-
-        return results
-            .distinctBy {
-                it.url
-            }
     }
 
     override suspend fun load(
         url: String
     ): LoadResponse? {
 
-        if (url.startsWith("patriarcatv://alfa/")) {
-            return null
-        }
-
         val movie =
             PelisForteAdapter.loadMovie(url)
                 ?: return null
 
         return newMovieLoadResponse(
-            name = movie.title,
-            url = movie.url,
-            type = TvType.Movie,
-            dataUrl = movie.url
+            movie.title,
+            movie.url,
+            TvType.Movie,
+            movie.url
         ) {
-            posterUrl = movie.posterUrl
-            year = movie.year
-            plot = movie.plot
+
+            posterUrl =
+                movie.posterUrl
+
+            year =
+                movie.year
         }
     }
 
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
+        subtitleCallback:
+            (SubtitleFile) -> Unit,
+        callback:
+            (ExtractorLink) -> Unit
     ): Boolean {
 
         val movie =
             PelisForteAdapter.loadMovie(data)
                 ?: return false
 
-        var loaded = false
+        if (movie.players.isEmpty()) {
+            return false
+        }
 
-        movie.playerUrls.forEach { playerUrl ->
+        var found =
+            false
+
+        for (player in movie.players) {
+
+            val resolved =
+                PelisForteAdapter
+                    .resolvePlayer(player)
+                    ?: continue
 
             try {
+
                 loadExtractor(
-                    playerUrl,
+                    resolved,
+                    player,
                     subtitleCallback,
                     callback
                 )
 
-                loaded = true
+                found = true
+
             } catch (_: Throwable) {
             }
         }
 
-        return loaded
-    }
-
-    private fun addCatalogSection(
-        sections: MutableList<HomePageList>,
-        title: String,
-        category: AlfaChannelCatalog.Category
-    ) {
-
-        val items =
-            AlfaCatalogAdapter.getByCategory(
-                this,
-                category
-            )
-
-        if (items.isNotEmpty()) {
-            sections.add(
-                HomePageList(
-                    name = title,
-                    list = items,
-                    isHorizontalImages = false
-                )
-            )
-        }
+        return found
     }
 }

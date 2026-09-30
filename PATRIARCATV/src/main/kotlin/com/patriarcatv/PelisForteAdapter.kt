@@ -23,45 +23,77 @@ object PelisForteAdapter {
         val url: String,
         val posterUrl: String?,
         val year: Int?,
-        val plot: String?,
-        val playerUrls: List<String>
+        val players: List<String>
     )
 
-    suspend fun getLatest(api: MainAPI): List<SearchResponse> =
-        getMovies("$BASE_URL/pelicula")
+    suspend fun getLatest(
+        api: MainAPI,
+        page: Int = 1
+    ): List<SearchResponse> =
+        getMovies(pageUrl("$BASE_URL/pelicula", page))
             .map { it.toSearchResponse(api) }
 
-    suspend fun getCastellano(api: MainAPI): List<SearchResponse> =
-        getMovies("$BASE_URL/pelis/idiomas/castellano")
-            .map { it.toSearchResponse(api) }
+    suspend fun getCastellano(
+        api: MainAPI,
+        page: Int = 1
+    ): List<SearchResponse> =
+        getMovies(
+            pageUrl(
+                "$BASE_URL/pelis/idiomas/castellano",
+                page
+            )
+        ).map { it.toSearchResponse(api) }
 
-    suspend fun getLatino(api: MainAPI): List<SearchResponse> =
-        getMovies("$BASE_URL/pelis/idiomas/espanol-latino")
-            .map { it.toSearchResponse(api) }
+    suspend fun getLatino(
+        api: MainAPI,
+        page: Int = 1
+    ): List<SearchResponse> =
+        getMovies(
+            pageUrl(
+                "$BASE_URL/pelis/idiomas/espanol-latino",
+                page
+            )
+        ).map { it.toSearchResponse(api) }
 
-    suspend fun getVose(api: MainAPI): List<SearchResponse> =
-        getMovies("$BASE_URL/pelis/idiomas/subtituladas-p02")
-            .map { it.toSearchResponse(api) }
+    suspend fun getVose(
+        api: MainAPI,
+        page: Int = 1
+    ): List<SearchResponse> =
+        getMovies(
+            pageUrl(
+                "$BASE_URL/pelis/idiomas/subtituladas-p02",
+                page
+            )
+        ).map { it.toSearchResponse(api) }
 
     suspend fun search(
         api: MainAPI,
         query: String
     ): List<SearchResponse> {
 
-        if (query.isBlank()) return emptyList()
+        if (query.isBlank()) {
+            return emptyList()
+        }
 
         val encoded = URLEncoder.encode(
             query.trim(),
             Charsets.UTF_8.name()
         )
 
-        return getMovies("$BASE_URL/page/1?s=$encoded")
-            .map { it.toSearchResponse(api) }
+        return getMovies(
+            "$BASE_URL/page/1?s=$encoded"
+        ).map {
+            it.toSearchResponse(api)
+        }
     }
 
     suspend fun loadMovie(
         url: String
     ): MovieDetails? {
+
+        if (!url.startsWith(BASE_URL)) {
+            return null
+        }
 
         val document = try {
             app.get(url).document
@@ -74,48 +106,61 @@ object PelisForteAdapter {
                 ?.text()
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
-                ?: document.selectFirst("meta[property=og:title]")
+                ?: document
+                    .selectFirst("meta[property=og:title]")
                     ?.attr("content")
                     ?.trim()
+                    ?.takeIf { it.isNotBlank() }
                 ?: return null
 
         val poster =
-            document.selectFirst("meta[property=og:image]")
-                ?.attr("content")
-                ?.takeIf { it.isNotBlank() }
-                ?: document.selectFirst("img")
-                    ?.attr("src")
-                    ?.takeIf { it.isNotBlank() }
-
-        val description =
-            document.selectFirst("meta[name=description]")
+            document
+                .selectFirst("meta[property=og:image]")
                 ?.attr("content")
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
 
         val year =
-            Regex("""\b(19|20)\d{2}\b""")
-                .find(document.text())
-                ?.value
+            document
+                .selectFirst(".year")
+                ?.text()
+                ?.trim()
                 ?.toIntOrNull()
+                ?: Regex("""\b(?:19|20)\d{2}\b""")
+                    .find(document.text())
+                    ?.value
+                    ?.toIntOrNull()
 
-        val player =
-            document.selectFirst("section.player")
+        /*
+         * Igual que findvideos() del canal oficial de Alfa:
+         *
+         * soup = create_soup(item.url).find('section', class_='player')
+         * matches = soup.find_all("iframe")
+         * url = elem['data-src']
+         * url = url.replace("?h=", "r.php?h=")
+         */
 
-        val urls =
-            player
+        val players =
+            document
+                .selectFirst("section.player")
                 ?.select("iframe")
                 ?.mapNotNull { iframe ->
-                    val raw =
+
+                    val value =
                         iframe.attr("data-src")
-                            .ifBlank { iframe.attr("src") }
+                            .ifBlank {
+                                iframe.attr("src")
+                            }
                             .trim()
 
-                    if (raw.isBlank()) {
+                    if (value.isBlank()) {
                         null
                     } else {
                         normalizeUrl(
-                            raw.replace("?h=", "r.php?h=")
+                            value.replace(
+                                "?h=",
+                                "r.php?h="
+                            )
                         )
                     }
                 }
@@ -127,9 +172,28 @@ object PelisForteAdapter {
             url = url,
             posterUrl = poster?.let(::normalizeUrl),
             year = year,
-            plot = description,
-            playerUrls = urls
+            players = players
         )
+    }
+
+    suspend fun resolvePlayer(
+        playerUrl: String
+    ): String? {
+
+        /*
+         * Igual que play() de Alfa:
+         *
+         * url = httptools.downloadpage(item.url).url
+         */
+
+        return try {
+            app.get(
+                playerUrl,
+                allowRedirects = true
+            ).url
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     private suspend fun getMovies(
@@ -142,32 +206,48 @@ object PelisForteAdapter {
             return emptyList()
         }
 
-        return document
-            .select("ul.post-lst li[class^=post-]")
-            .mapNotNull { item ->
+        val container =
+            document.selectFirst("ul.post-lst")
+                ?: return emptyList()
 
-                val link =
-                    item.selectFirst("a[href]")
-                        ?.attr("href")
-                        ?.trim()
-                        ?.takeIf { it.isNotBlank() }
+        return container
+            .select("li")
+            .filter { element ->
+                element.classNames().any {
+                    it.matches(
+                        Regex("""post-\d+""")
+                    )
+                }
+            }
+            .mapNotNull { element ->
+
+                val linkElement =
+                    element.selectFirst("a[href]")
                         ?: return@mapNotNull null
 
                 val title =
-                    item.selectFirst("h2")
+                    element.selectFirst("h2")
                         ?.text()
                         ?.trim()
                         ?.takeIf { it.isNotBlank() }
                         ?: return@mapNotNull null
 
+                val link =
+                    linkElement
+                        .attr("href")
+                        .trim()
+                        .takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null
+
                 val poster =
-                    item.selectFirst("img")
+                    element.selectFirst("img")
                         ?.attr("src")
                         ?.trim()
                         ?.takeIf { it.isNotBlank() }
 
                 val year =
-                    item.selectFirst("span.year")
+                    element
+                        .selectFirst("span.year")
                         ?.text()
                         ?.trim()
                         ?.toIntOrNull()
@@ -175,11 +255,14 @@ object PelisForteAdapter {
                 MovieItem(
                     title = title,
                     url = normalizeUrl(link),
-                    posterUrl = poster?.let(::normalizeUrl),
+                    posterUrl =
+                        poster?.let(::normalizeUrl),
                     year = year
                 )
             }
-            .distinctBy { it.url }
+            .distinctBy {
+                it.url
+            }
     }
 
     private fun MovieItem.toSearchResponse(
@@ -191,9 +274,24 @@ object PelisForteAdapter {
             url = url,
             type = TvType.Movie
         ) {
-            posterUrl = this@toSearchResponse.posterUrl
-            year = this@toSearchResponse.year
+            posterUrl =
+                this@toSearchResponse.posterUrl
+
+            year =
+                this@toSearchResponse.year
         }
+    }
+
+    private fun pageUrl(
+        base: String,
+        page: Int
+    ): String {
+
+        if (page <= 1) {
+            return base
+        }
+
+        return "${base.trimEnd('/')}/page/$page"
     }
 
     private fun normalizeUrl(
@@ -201,6 +299,7 @@ object PelisForteAdapter {
     ): String {
 
         return when {
+
             value.startsWith("//") ->
                 "https:$value"
 
