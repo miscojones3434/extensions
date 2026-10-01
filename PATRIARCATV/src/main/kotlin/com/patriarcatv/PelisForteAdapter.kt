@@ -6,43 +6,20 @@ import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.newMovieSearchResponse
+import java.net.URLDecoder
 import java.net.URLEncoder
 
 object PelisForteAdapter {
 
-    private const val BASE_URL =
-        "https://www2.pelisforte.se"
+    const val BASE_URL = "https://www2.pelisforte.se"
 
-    /*
-     * pelisforte.py oficial:
-     *
-     * IDIOMAS = {
-     *   'Subtitulado': 'VOSE',
-     *   'Latino': 'LAT',
-     *   'Castellano': 'CAST'
-     * }
-     */
-    val languages = mapOf(
+    private val IDIOMAS = mapOf(
         "Subtitulado" to "VOSE",
         "Latino" to "LAT",
         "Castellano" to "CAST"
     )
 
-    /*
-     * pelisforte.py oficial:
-     *
-     * SERVER = {
-     *   'swish': 'Streamwish',
-     *   'vgfplay': 'Vidguard',
-     *   'playpf': 'Tiwikiwi',
-     *   'filemoon': 'Filemoon',
-     *   'okhd': 'Okhd',
-     *   'bf0skv': 'Filemoon',
-     *   'byse': 'Filemoon',
-     *   'w1tv': 'Kinoger'
-     * }
-     */
-    val servers = mapOf(
+    private val SERVER = mapOf(
         "swish" to "Streamwish",
         "vgfplay" to "Vidguard",
         "playpf" to "Tiwikiwi",
@@ -67,10 +44,26 @@ object PelisForteAdapter {
         val cast: List<AlfaTmdbAdapter.CastMember>
     )
 
+    data class CatalogPage(
+        val items: List<MovieItem>,
+        val nextUrl: String?
+    )
+
+    data class NavigationItem(
+        val title: String,
+        val url: String,
+        val extra: String = ""
+    )
+
     data class PlayerItem(
         val url: String,
         val server: String,
         val language: String
+    )
+
+    data class ResolvedPlayer(
+        val url: String,
+        val referer: String
     )
 
     data class MovieDetails(
@@ -84,90 +77,356 @@ object PelisForteAdapter {
         val durationMinutes: Int?,
         val rating: Double?,
         val genres: List<String>,
-        val cast: List<AlfaTmdbAdapter.CastMember>,
-        val players: List<PlayerItem>
+        val cast: List<AlfaTmdbAdapter.CastMember>
     )
 
     /*
-     * mainlist():
-     * Novedades
-     */
-    suspend fun getLatest(
-        api: MainAPI,
-        page: Int = 1
-    ): List<SearchResponse> {
-
-        return getMovies(
-            pageUrl(
-                "$BASE_URL/pelicula",
-                page
-            )
-        ).map {
-            it.toSearchResponse(api)
-        }
-    }
-
-    /*
-     * mainlist():
-     * Castellano
-     */
-    suspend fun getCastellano(
-        api: MainAPI,
-        page: Int = 1
-    ): List<SearchResponse> {
-
-        return getMovies(
-            pageUrl(
-                "$BASE_URL/pelis/idiomas/castellano",
-                page
-            )
-        ).map {
-            it.toSearchResponse(api)
-        }
-    }
-
-    /*
-     * mainlist():
-     * Latino
-     */
-    suspend fun getLatino(
-        api: MainAPI,
-        page: Int = 1
-    ): List<SearchResponse> {
-
-        return getMovies(
-            pageUrl(
-                "$BASE_URL/pelis/idiomas/espanol-latino",
-                page
-            )
-        ).map {
-            it.toSearchResponse(api)
-        }
-    }
-
-    /*
-     * mainlist():
-     * VOSE
-     */
-    suspend fun getVose(
-        api: MainAPI,
-        page: Int = 1
-    ): List<SearchResponse> {
-
-        return getMovies(
-            pageUrl(
-                "$BASE_URL/pelis/idiomas/subtituladas-p02",
-                page
-            )
-        ).map {
-            it.toSearchResponse(api)
-        }
-    }
-
-    /*
-     * search() oficial:
+     * Alfa:
      *
-     * item.url = "%s/page/1?s=%s"
+     * def create_soup(url, ...)
+     *     data = httptools.downloadpage(url, canonical=canonical).data
+     *     soup = BeautifulSoup(data, "html5lib")
+     */
+    private suspend fun createDocument(
+        url: String
+    ) = app.get(url).document
+
+    /*
+     * Alfa list_all(item)
+     */
+    suspend fun listAll(
+        api: MainAPI,
+        url: String,
+        extra: String = ""
+    ): CatalogPage {
+
+        val document =
+            try {
+                createDocument(url)
+            } catch (_: Throwable) {
+                return CatalogPage(
+                    emptyList(),
+                    null
+                )
+            }
+
+        val container =
+            document.selectFirst("ul.post-lst")
+                ?: return CatalogPage(
+                    emptyList(),
+                    null
+                )
+
+        /*
+         * Alfa:
+         *
+         * matches = soup.find(
+         *     'ul',
+         *     class_='post-lst'
+         * ).find_all(
+         *     "li",
+         *     class_=re.compile(r"^post-\d+")
+         * )
+         */
+        val matches =
+            container
+                .select("li")
+                .filter { element ->
+                    element.classNames().any { className ->
+                        Regex("""^post-\d+""")
+                            .matches(className)
+                    }
+                }
+
+        val basicItems =
+            matches.mapNotNull { elem ->
+
+                val link =
+                    elem.selectFirst("a[href]")
+                        ?: return@mapNotNull null
+
+                val title =
+                    elem.selectFirst("h2")
+                        ?.text()
+                        ?.trim()
+                        ?.takeIf {
+                            it.isNotBlank()
+                        }
+                        ?: return@mapNotNull null
+
+                val href =
+                    link.attr("href")
+                        .trim()
+                        .takeIf {
+                            it.isNotBlank()
+                        }
+                        ?: return@mapNotNull null
+
+                /*
+                 * Alfa:
+                 * thumbnail = elem.img['src']
+                 */
+                val thumbnail =
+                    elem.selectFirst("img")
+                        ?.attr("src")
+                        ?.trim()
+                        ?.takeIf {
+                            it.isNotBlank()
+                        }
+
+                /*
+                 * Alfa:
+                 * year = elem.find(
+                 *     'span',
+                 *     class_='year'
+                 * ).text.strip()
+                 */
+                val year =
+                    elem.selectFirst("span.year")
+                        ?.text()
+                        ?.trim()
+                        ?.takeIf {
+                            it.length == 4
+                        }
+                        ?.toIntOrNull()
+
+                MovieItem(
+                    title = title,
+                    url = mediaUrl(
+                        normalizeUrl(href),
+                        extra
+                    ),
+                    posterUrl =
+                        thumbnail?.let(
+                            ::normalizeUrl
+                        ),
+                    year = year,
+                    tmdbId = null,
+                    plot = null,
+                    backdropUrl = null,
+                    durationMinutes = null,
+                    rating = null,
+                    genres = emptyList(),
+                    cast = emptyList()
+                )
+            }
+
+        /*
+         * Alfa:
+         *
+         * tmdb.set_infoLabels(
+         *     itemlist,
+         *     True
+         * )
+         */
+        val enriched =
+            basicItems.amap { item ->
+
+                val tmdb =
+                    try {
+                        AlfaTmdbAdapter.getMovie(
+                            title = item.title,
+                            year = item.year
+                        )
+                    } catch (_: Throwable) {
+                        null
+                    }
+
+                if (tmdb == null) {
+                    item
+                } else {
+                    item.copy(
+                        title =
+                            tmdb.title
+                                .takeIf {
+                                    it.isNotBlank()
+                                }
+                                ?: item.title,
+
+                        posterUrl =
+                            tmdb.posterUrl
+                                ?: item.posterUrl,
+
+                        year =
+                            tmdb.year
+                                ?: item.year,
+
+                        tmdbId =
+                            tmdb.tmdbId,
+
+                        plot =
+                            tmdb.plot,
+
+                        backdropUrl =
+                            tmdb.backdropUrl,
+
+                        durationMinutes =
+                            tmdb.durationMinutes,
+
+                        rating =
+                            tmdb.rating,
+
+                        genres =
+                            tmdb.genres,
+
+                        cast =
+                            tmdb.cast
+                    )
+                }
+            }
+
+        /*
+         * Alfa:
+         *
+         * next_page = soup.find(
+         *     'a',
+         *     class_='current'
+         * )
+         *
+         * if next_page and
+         * next_page.find_next_sibling("a"):
+         *     next_page =
+         *       next_page.find_next_sibling("a")['href']
+         */
+        val current =
+            document.selectFirst("a.current")
+
+        val next =
+            current
+                ?.nextElementSibling()
+                ?.takeIf {
+                    it.tagName() == "a"
+                }
+                ?.attr("href")
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?.let(::normalizeUrl)
+
+        return CatalogPage(
+            items = enriched,
+            nextUrl = next
+        )
+    }
+
+    /*
+     * Alfa section(item)
+     */
+    suspend fun section(
+        url: String,
+        title: String
+    ): List<NavigationItem> {
+
+        val document =
+            try {
+                createDocument(url)
+            } catch (_: Throwable) {
+                return emptyList()
+            }
+
+        val selector =
+            if (
+                title.contains(
+                    "Sagas",
+                    ignoreCase = true
+                )
+            ) {
+                "li#menu-item-11504 li"
+            } else {
+                "li#menu-item-77 li"
+            }
+
+        return document
+            .select(selector)
+            .mapNotNull { elem ->
+
+                val anchor =
+                    elem.selectFirst("a[href]")
+                        ?: return@mapNotNull null
+
+                val itemTitle =
+                    anchor.text()
+                        .trim()
+                        .takeIf {
+                            it.isNotBlank()
+                        }
+                        ?: return@mapNotNull null
+
+                val itemUrl =
+                    anchor.attr("href")
+                        .trim()
+                        .takeIf {
+                            it.isNotBlank()
+                        }
+                        ?: return@mapNotNull null
+
+                NavigationItem(
+                    title = itemTitle,
+                    url = normalizeUrl(itemUrl)
+                )
+            }
+    }
+
+    /*
+     * Alfa alphabet(item)
+     */
+    suspend fun alphabet(
+        url: String,
+        years: Boolean
+    ): List<NavigationItem> {
+
+        val document =
+            try {
+                createDocument(url)
+            } catch (_: Throwable) {
+                return emptyList()
+            }
+
+        val elements =
+            if (years) {
+                document
+                    .select(
+                        "section#torofilm_movies_annee-2 li"
+                    )
+                    .reversed()
+            } else {
+                document.select(
+                    "section#wdgt_letter-2 li"
+                )
+            }
+
+        return elements.mapNotNull { elem ->
+
+            val anchor =
+                elem.selectFirst("a[href]")
+                    ?: return@mapNotNull null
+
+            val itemTitle =
+                anchor.text()
+                    .trim()
+                    .takeIf {
+                        it.isNotBlank()
+                    }
+                    ?: return@mapNotNull null
+
+            val itemUrl =
+                anchor.attr("href")
+                    .trim()
+                    .takeIf {
+                        it.isNotBlank()
+                    }
+                    ?: return@mapNotNull null
+
+            NavigationItem(
+                title = itemTitle,
+                url = normalizeUrl(itemUrl)
+            )
+        }
+    }
+
+    /*
+     * Alfa search(item, texto)
      */
     suspend fun search(
         api: MainAPI,
@@ -183,200 +442,199 @@ object PelisForteAdapter {
                 query.trim(),
                 Charsets.UTF_8.name()
             )
+                .replace("+", "%20")
 
-        return getMovies(
-            "$BASE_URL/page/1?s=$encoded"
-        ).map {
-            it.toSearchResponse(api)
-        }
+        return listAll(
+            api = api,
+            url = "$BASE_URL/page/1?s=$encoded"
+        )
+            .items
+            .map {
+                it.toSearchResponse(api)
+            }
     }
 
     /*
-     * list_all() de Alfa:
-     *
-     * soup.find('ul', class_='post-lst')
-     *     .find_all("li", class_=re.compile(r"^post-\d+"))
-     *
-     * url = elem.a['href']
-     * title = elem.h2.text.strip()
-     * thumbnail = elem.img['src']
-     * year = elem.find('span', class_='year').text.strip()
-     *
-     * tmdb.set_infoLabels(itemlist, True)
+     * Alfa findvideos(item)
      */
-    private suspend fun getMovies(
-        url: String
-    ): List<MovieItem> {
+    suspend fun findVideos(
+        mediaData: String
+    ): List<PlayerItem> {
+
+        val decoded =
+            decodeMediaUrl(mediaData)
 
         val document =
             try {
-                app.get(url).document
+                createDocument(decoded.url)
             } catch (_: Throwable) {
                 return emptyList()
             }
 
-        val container =
-            document.selectFirst("ul.post-lst")
+        val playerSection =
+            document.selectFirst(
+                "section.player"
+            )
                 ?: return emptyList()
 
-        val rawItems =
-            container
-                .select("li")
-                .filter { element ->
+        val matches =
+            playerSection.select("iframe")
 
-                    element.classNames().any { className ->
-                        Regex("""^post-\d+""")
-                            .containsMatchIn(className)
-                    }
-                }
-                .mapNotNull { element ->
+        val serverLabels =
+            playerSection.select("span.server")
 
-                    val href =
-                        element
-                            .selectFirst("a[href]")
-                            ?.attr("href")
-                            ?.trim()
-                            ?.takeIf {
-                                it.isNotBlank()
-                            }
-                            ?: return@mapNotNull null
+        val list =
+            matches.mapIndexedNotNull {
+                    index,
+                    elem ->
 
-                    val title =
-                        element
-                            .selectFirst("h2")
-                            ?.text()
-                            ?.trim()
-                            ?.takeIf {
-                                it.isNotBlank()
-                            }
-                            ?: return@mapNotNull null
+                /*
+                 * Alfa:
+                 * url = elem['data-src']
+                 */
+                val rawUrl =
+                    elem.attr("data-src")
+                        .trim()
+                        .takeIf {
+                            it.isNotBlank()
+                        }
+                        ?: return@mapIndexedNotNull null
 
-                    /*
-                     * Alfa usa elem.img['src'].
-                     * Se respeta src como primera opción.
-                     */
-                    val image =
-                        element.selectFirst("img")
+                val serv =
+                    serverLabels
+                        .getOrNull(index)
+                        ?: return@mapIndexedNotNull null
 
-                    val poster =
-                        image
-                            ?.attr("src")
-                            ?.trim()
-                            ?.takeIf {
-                                it.isNotBlank()
-                            }
+                /*
+                 * Alfa:
+                 *
+                 * srv, lang =
+                 *     serv.text.split(" -")
+                 */
+                val parts =
+                    serv.text()
+                        .split(
+                            " -",
+                            limit = 2
+                        )
 
-                    val yearText =
-                        element
-                            .selectFirst("span.year")
-                            ?.text()
-                            ?.trim()
-
-                    val year =
-                        yearText
-                            ?.takeIf {
-                                it.length == 4
-                            }
-                            ?.toIntOrNull()
-
-                    MovieItem(
-                        title = title,
-                        url = normalizeUrl(href),
-                        posterUrl =
-                            poster?.let(::normalizeUrl),
-                        year = year,
-
-                        tmdbId = null,
-                        plot = null,
-                        backdropUrl = null,
-                        durationMinutes = null,
-                        rating = null,
-                        genres = emptyList(),
-                        cast = emptyList()
-                    )
-                }
-                .distinctBy {
-                    it.url
+                if (parts.size != 2) {
+                    return@mapIndexedNotNull null
                 }
 
-        /*
-         * Equivalente a:
-         *
-         * tmdb.set_infoLabels(itemlist, True)
-         *
-         * CloudStream dispone de amap(), que ejecuta
-         * las consultas suspend de forma concurrente.
-         */
-        return rawItems.amap { item ->
+                val srv =
+                    parts[0]
+                        .trim()
+                        .lowercase()
 
-            val tmdb =
-                try {
-                    AlfaTmdbAdapter.getMovie(
-                        title = item.title,
-                        year = item.year
-                    )
-                } catch (_: Throwable) {
-                    null
-                }
+                val lang =
+                    parts[1]
+                        .trim()
+                        .split(" ")
+                        .last()
 
-            if (tmdb == null) {
-                item
-            } else {
-                item.copy(
-                    title =
-                        tmdb.title
-                            .takeIf {
-                                it.isNotBlank()
-                            }
-                            ?: item.title,
+                val language =
+                    IDIOMAS[lang]
+                        ?: lang
 
-                    posterUrl =
-                        tmdb.posterUrl
-                            ?: item.posterUrl,
+                val server =
+                    SERVER[srv]
+                        ?: srv
 
-                    year =
-                        tmdb.year
-                            ?: item.year,
-
-                    tmdbId =
-                        tmdb.tmdbId,
-
-                    plot =
-                        tmdb.plot,
-
-                    backdropUrl =
-                        tmdb.backdropUrl,
-
-                    durationMinutes =
-                        tmdb.durationMinutes,
-
-                    rating =
-                        tmdb.rating,
-
-                    genres =
-                        tmdb.genres,
-
-                    cast =
-                        tmdb.cast
+                PlayerItem(
+                    url =
+                        normalizeUrl(
+                            rawUrl.replace(
+                                "?h=",
+                                "r.php?h="
+                            )
+                        ),
+                    server = server,
+                    language = language
                 )
             }
+                .sortedWith(
+                    compareBy<PlayerItem>(
+                        { it.language },
+                        { it.server }
+                    )
+                )
+
+        /*
+         * Alfa:
+         *
+         * if item.extra:
+         *     itemlist = [
+         *         i for i in itemlist
+         *         if i.language == item.extra
+         *     ]
+         */
+        return if (
+            decoded.extra.isNotBlank()
+        ) {
+            list.filter {
+                it.language ==
+                    decoded.extra
+            }
+        } else {
+            list
         }
     }
 
     /*
-     * Ficha de película.
-     *
-     * Primero se leen los datos reales de la página.
-     * Después se hace el mismo enriquecimiento TMDB.
-     * Finalmente se ejecuta el equivalente de findvideos().
+     * Alfa play(item)
      */
+    suspend fun play(
+        player: PlayerItem
+    ): ResolvedPlayer? {
+
+        val resolved =
+            try {
+                app.get(
+                    player.url,
+                    allowRedirects = true
+                ).url
+            } catch (_: Throwable) {
+                return null
+            }
+
+        /*
+         * Alfa:
+         *
+         * if "okhd" in url:
+         *     url +=
+         *       "|Referer=%s" % item.url
+         *
+         * CloudStream separa URL y Referer.
+         */
+        val referer =
+            if (
+                resolved.contains(
+                    "okhd",
+                    ignoreCase = true
+                )
+            ) {
+                player.url
+            } else {
+                player.url
+            }
+
+        return ResolvedPlayer(
+            url = resolved,
+            referer = referer
+        )
+    }
+
     suspend fun loadMovie(
-        url: String
+        mediaData: String
     ): MovieDetails? {
+
+        val decoded =
+            decodeMediaUrl(mediaData)
 
         val document =
             try {
-                app.get(url).document
+                createDocument(decoded.url)
             } catch (_: Throwable) {
                 return null
             }
@@ -400,19 +658,7 @@ object PelisForteAdapter {
                     }
                 ?: return null
 
-        val pagePoster =
-            document
-                .selectFirst(
-                    "meta[property=og:image]"
-                )
-                ?.attr("content")
-                ?.trim()
-                ?.takeIf {
-                    it.isNotBlank()
-                }
-                ?.let(::normalizeUrl)
-
-        val pageYear =
+        val year =
             document
                 .selectFirst("span.year")
                 ?.text()
@@ -428,37 +674,45 @@ object PelisForteAdapter {
                     ?.value
                     ?.toIntOrNull()
 
+        val sitePoster =
+            document
+                .selectFirst(
+                    "meta[property=og:image]"
+                )
+                ?.attr("content")
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?.let(::normalizeUrl)
+
         val tmdb =
             try {
                 AlfaTmdbAdapter.getMovie(
                     title = title,
-                    year = pageYear
+                    year = year
                 )
             } catch (_: Throwable) {
                 null
             }
 
-        val players =
-            parsePlayers(document)
-
         return MovieDetails(
             title =
-                tmdb
-                    ?.title
+                tmdb?.title
                     ?.takeIf {
                         it.isNotBlank()
                     }
                     ?: title,
 
-            url = url,
+            url = mediaData,
 
             posterUrl =
                 tmdb?.posterUrl
-                    ?: pagePoster,
+                    ?: sitePoster,
 
             year =
                 tmdb?.year
-                    ?: pageYear,
+                    ?: year,
 
             tmdbId =
                 tmdb?.tmdbId,
@@ -481,164 +735,11 @@ object PelisForteAdapter {
 
             cast =
                 tmdb?.cast
-                    ?: emptyList(),
-
-            players =
-                players
+                    ?: emptyList()
         )
     }
 
-    /*
-     * findvideos() oficial:
-     *
-     * soup = create_soup(item.url)
-     *     .find('section', class_='player')
-     *
-     * matches = soup.find_all("iframe")
-     * servers = soup.find_all("span", class_="server")
-     *
-     * for elem, serv in zip(matches, servers):
-     *     url = elem['data-src']
-     *     url = url.replace("?h=", "r.php?h=")
-     *
-     *     srv, lang = serv.text.split(" -")
-     *     srv = srv.strip().lower()
-     *     lang = lang.strip().split(" ")[-1]
-     *
-     *     language = IDIOMAS.get(lang, lang)
-     *     server = SERVER.get(srv, srv)
-     */
-    private fun parsePlayers(
-        document: org.jsoup.nodes.Document
-    ): List<PlayerItem> {
-
-        val playerSection =
-            document.selectFirst("section.player")
-                ?: return emptyList()
-
-        val iframes =
-            playerSection.select("iframe")
-
-        val serverLabels =
-            playerSection.select("span.server")
-
-        return iframes
-            .mapIndexedNotNull { index, iframe ->
-
-                val rawUrl =
-                    iframe
-                        .attr("data-src")
-                        .ifBlank {
-                            iframe.attr("src")
-                        }
-                        .trim()
-
-                if (rawUrl.isBlank()) {
-                    return@mapIndexedNotNull null
-                }
-
-                val label =
-                    serverLabels
-                        .getOrNull(index)
-                        ?.text()
-                        ?.trim()
-                        .orEmpty()
-
-                val parts =
-                    label.split(
-                        " -",
-                        limit = 2
-                    )
-
-                val rawServer =
-                    parts
-                        .getOrNull(0)
-                        ?.trim()
-                        ?.lowercase()
-                        .orEmpty()
-
-                val rawLanguage =
-                    parts
-                        .getOrNull(1)
-                        ?.trim()
-                        ?.split(" ")
-                        ?.lastOrNull()
-                        .orEmpty()
-
-                val server =
-                    servers[rawServer]
-                        ?: rawServer
-
-                val language =
-                    languages[rawLanguage]
-                        ?: rawLanguage
-
-                PlayerItem(
-                    url =
-                        normalizeUrl(
-                            rawUrl.replace(
-                                "?h=",
-                                "r.php?h="
-                            )
-                        ),
-
-                    server =
-                        server,
-
-                    language =
-                        language
-                )
-            }
-            .sortedWith(
-                compareBy<PlayerItem>(
-                    { it.language },
-                    { it.server }
-                )
-            )
-            .distinctBy {
-                Triple(
-                    it.url,
-                    it.server,
-                    it.language
-                )
-            }
-    }
-
-    /*
-     * play() oficial:
-     *
-     * url = httptools.downloadpage(item.url).url
-     *
-     * if "okhd" in url:
-     *     url += "|Referer=%s" % item.url
-     */
-    suspend fun resolvePlayer(
-        player: PlayerItem
-    ): String? {
-
-        val resolved =
-            try {
-                app.get(
-                    player.url,
-                    allowRedirects = true
-                ).url
-            } catch (_: Throwable) {
-                return null
-            }
-
-        return if (
-            resolved.contains(
-                "okhd",
-                ignoreCase = true
-            )
-        ) {
-            "$resolved|Referer=${player.url}"
-        } else {
-            resolved
-        }
-    }
-
-    private fun MovieItem.toSearchResponse(
+    fun MovieItem.toSearchResponse(
         api: MainAPI
     ): SearchResponse {
 
@@ -655,19 +756,66 @@ object PelisForteAdapter {
         }
     }
 
-    private fun pageUrl(
-        base: String,
-        page: Int
+    /*
+     * CloudStream necesita transportar item.extra
+     * junto a la URL.
+     *
+     * El fragmento #... no se envía al servidor.
+     */
+    private fun mediaUrl(
+        url: String,
+        extra: String
     ): String {
 
-        return if (page <= 1) {
-            base
-        } else {
-            "${base.trimEnd('/')}/page/$page"
+        if (extra.isBlank()) {
+            return url
         }
+
+        return "$url#patriarcatv_extra=${
+            URLEncoder.encode(
+                extra,
+                Charsets.UTF_8.name()
+            )
+        }"
     }
 
-    private fun normalizeUrl(
+    private data class MediaData(
+        val url: String,
+        val extra: String
+    )
+
+    private fun decodeMediaUrl(
+        value: String
+    ): MediaData {
+
+        val url =
+            value.substringBefore(
+                "#patriarcatv_extra="
+            )
+
+        val rawExtra =
+            value.substringAfter(
+                "#patriarcatv_extra=",
+                ""
+            )
+
+        val extra =
+            if (rawExtra.isBlank()) {
+                ""
+            } else {
+                URLDecoder.decode(
+                    rawExtra,
+                    Charsets.UTF_8.name()
+                )
+            }
+
+        return MediaData(
+            url = url,
+            extra = extra
+        )
+    }
+
+    fun normalizeUrl(
         value: String
     ): String {
 
@@ -684,5 +832,3 @@ object PelisForteAdapter {
         }
     }
 }
-
-
