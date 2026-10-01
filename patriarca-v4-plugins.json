@@ -1,0 +1,159 @@
+[
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=www.dailymotion.com&sz=%size%",
+        "jarFileSize": 55183,
+        "fileHash": "sha256-3065c229203d060c08c7658d04fce8a7b89ab124b92397ddb1bcbcc562e70f45",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/miscojones3434/extensions",
+        "fileSize": 12999,
+        "status": 1,
+        "authors": [
+            "Luna712"
+        ],
+        "tvTypes": [
+            "Others"
+        ],
+        "version": 4,
+        "internalName": "DailymotionProvider",
+        "jarUrl": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/DailymotionProvider.jar",
+        "description": "Watch content from Dailymotion",
+        "url": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/DailymotionProvider.cs3",
+        "name": "DailymotionProvider",
+        "jarHash": "sha256-1f1121896dd1390e0742e103320b1e34858e41c8a421873c9408b2f00ce59aa1"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=archive.org&sz=%size%",
+        "jarFileSize": 131593,
+        "fileHash": "sha256-11117e95ac6e8ff2f47c3ce30228297bafbfc4722995bd9e018d60cf95c9c0be",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/miscojones3434/extensions",
+        "fileSize": 29517,
+        "status": 1,
+        "authors": [
+            "Luna712"
+        ],
+        "tvTypes": [
+            "Others"
+        ],
+        "version": 1,
+        "internalName": "InternetArchiveProvider",
+        "jarUrl": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/InternetArchiveProvider.jar",
+        "description": "Watch content from the Internet Archive at archive.org",
+        "url": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/InternetArchiveProvider.cs3",
+        "name": "InternetArchiveProvider",
+        "jarHash": "sha256-7065791df52eb498366a3ece1ccdbf7bc5718572def490bcf236d689bb7fab55"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=invidious.io&sz=%size%",
+        "jarFileSize": 69069,
+        "fileHash": "sha256-5e7f4fcf6960331e4f7ab5538efdff8501495d87bf6c0853da411aad7c086fab",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/miscojones3434/extensions",
+        "fileSize": 15326,
+        "status": 1,
+        "authors": [
+            "Cloudburst"
+        ],
+        "tvTypes": [
+            "Others"
+        ],
+        "version": 9,
+        "internalName": "InvidiousProvider",
+        "jarUrl": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/InvidiousProvider.jar",
+        "description": "Watch content from any invidious instance",
+        "url": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/InvidiousProvider.cs3",
+        "name": "InvidiousProvider",
+        "jarHash": "sha256-2dc97af700f02131d19631cc7009c462936cc55193b583b97bc6cba46087c45f"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=movistarplus.es&sz=%size%",
+        "fileHash": "sha256-4d91b14b94e573cf2e6df1995f7133a4ef46fb6f2c62c4586be495ff15ad62c4",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/miscojones3434/extensions",
+        "fileSize": 17836,
+        "status": 3,
+        "authors": [
+            "PATRIARCA"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 4,
+        "internalName": "MovistarPlus",
+        "description": "Movistar Plus+ desde Vu+/OpenWebif",
+        "url": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/MovistarPlus.cs3",
+        "name": "MovistarPlus"
+    },
+    {
+        "jarFileSize": 197040,
+        "fileHash": "sha256-2c5467c07ba27b775faa3f39d82b01fd44e9538fdd4ee963f3872c6062f19410",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/miscojones3434/extensions",
+        "fileSize": 39943,
+        "status": 3,
+        "authors": [
+            "PATRIARCA"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "Cartoon",
+            "Documentary",
+            "Others"
+        ],
+        "version": 4,
+        "internalName": "PATRIARCATV",
+        "jarUrl": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/PATRIARCATV.jar",
+        "description": "PATRIARCATV",
+        "url": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/PATRIARCATV.cs3",
+        "name": "PATRIARCATV",
+        "jarHash": "sha256-cf1d7040dc46ab24a99e4b59b789d3b8787db0e7146739f7f589dca37a65adf0"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=twitch.tv&sz=%size%",
+        "jarFileSize": 57332,
+        "fileHash": "sha256-09254b0db50f350e6be164566a71c281ee39d20e592ca8acda92c3428b20a707",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/miscojones3434/extensions",
+        "fileSize": 15210,
+        "status": 1,
+        "authors": [
+            "CranberrySoup"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 2,
+        "internalName": "TwitchProvider",
+        "jarUrl": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/TwitchProvider.jar",
+        "description": "Watch livestreams from Twitch",
+        "url": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/TwitchProvider.cs3",
+        "name": "TwitchProvider",
+        "jarHash": "sha256-1014b8f2e79523321355b4a33efadb63e86dce3a7320b5a5e41e8341afe10095"
+    },
+    {
+        "iconUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/YouTube_full-color_icon_%282017%29.svg/3840px-YouTube_full-color_icon_%282017%29.svg.png",
+        "jarFileSize": 46823,
+        "fileHash": "sha256-e94412095eabc720bb414e367015c9ea9ae1cd255ca14e9a4b9f57e4c333eddd",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/miscojones3434/extensions",
+        "fileSize": 13157,
+        "status": 1,
+        "authors": [
+            "KaifTaufiq"
+        ],
+        "tvTypes": [
+            "Other",
+            "Live",
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "YoutubeProvider",
+        "jarUrl": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/YoutubeProvider.jar",
+        "description": "Watch Youtube in Cloudstream",
+        "url": "https://raw.githubusercontent.com/miscojones3434/extensions/builds/YoutubeProvider.cs3",
+        "name": "YoutubeProvider",
+        "jarHash": "sha256-d74f806b81869c3909d3c7cedc87045b7157f01eb1164c813bcaadee1a24ae2c"
+    }
+]
