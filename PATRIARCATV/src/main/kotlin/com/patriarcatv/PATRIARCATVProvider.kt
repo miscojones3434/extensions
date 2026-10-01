@@ -14,8 +14,11 @@ import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
+import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
+import java.net.URLDecoder
+import java.net.URLEncoder
 
 class PATRIARCATVProvider : MainAPI() {
 
@@ -23,44 +26,56 @@ class PATRIARCATVProvider : MainAPI() {
         "PATRIARCATV"
 
     override var mainUrl =
-        "https://www2.pelisforte.se"
+        PelisForteAdapter.BASE_URL
 
     override var lang =
         "es"
 
     override val supportedTypes =
         setOf(
-            TvType.Movie
+            TvType.Movie,
+            TvType.Others
         )
 
     override val hasMainPage =
         true
 
     /*
-     * Equivalente al mainlist() de pelisforte.py:
+     * mainlist() de Alfa:
      *
      * Novedades
      * Castellano
      * Latino
      * VOSE
+     * Generos
+     * Alfabetico
+     * Años
      *
-     * Generos, Alfabetico y Años se añadirán en el
-     * siguiente bloque porque en Alfa son submenús,
-     * no simples listados.
+     * "Buscar..." corresponde al buscador
+     * nativo de CloudStream -> search().
      */
     override val mainPage =
         mainPageOf(
-            "$mainUrl/pelicula" to
-                "PelisForte · Novedades",
+            "list|$mainUrl/pelicula|" to
+                "Novedades",
 
-            "$mainUrl/pelis/idiomas/castellano" to
-                "PelisForte · Castellano",
+            "list|$mainUrl/pelis/idiomas/castellano|CAST" to
+                "Castellano",
 
-            "$mainUrl/pelis/idiomas/espanol-latino" to
-                "PelisForte · Latino",
+            "list|$mainUrl/pelis/idiomas/espanol-latino|LAT" to
+                "Latino",
 
-            "$mainUrl/pelis/idiomas/subtituladas-p02" to
-                "PelisForte · VOSE"
+            "list|$mainUrl/pelis/idiomas/subtituladas-p02|VOSE" to
+                "VOSE",
+
+            "section|$mainUrl/pelicula|Generos" to
+                "Generos",
+
+            "alphabet|$mainUrl/pelicula|letters" to
+                "Alfabetico",
+
+            "alphabet|$mainUrl/pelicula|years" to
+                "Años"
         )
 
     override suspend fun getMainPage(
@@ -68,82 +83,198 @@ class PATRIARCATVProvider : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
 
-        val realPage =
-            if (page < 1) {
-                1
-            } else {
-                page
-            }
+        val parts =
+            request.data.split(
+                "|",
+                limit = 3
+            )
 
-        val items =
-            when (request.name) {
-
-                "PelisForte · Castellano" ->
-                    PelisForteAdapter.getCastellano(
-                        this,
-                        realPage
-                    )
-
-                "PelisForte · Latino" ->
-                    PelisForteAdapter.getLatino(
-                        this,
-                        realPage
-                    )
-
-                "PelisForte · VOSE" ->
-                    PelisForteAdapter.getVose(
-                        this,
-                        realPage
-                    )
-
-                else ->
-                    PelisForteAdapter.getLatest(
-                        this,
-                        realPage
-                    )
-            }
-
-        return newHomePageResponse(
-            listOf(
-                HomePageList(
-                    name = request.name,
-                    list = items,
-                    isHorizontalImages = true
+        val action =
+            parts.getOrNull(0)
+                ?: return newHomePageResponse(
+                    emptyList()
                 )
-            ),
-            hasNext = items.isNotEmpty()
-        )
+
+        val url =
+            parts.getOrNull(1)
+                ?: return newHomePageResponse(
+                    emptyList()
+                )
+
+        val extra =
+            parts.getOrNull(2)
+                .orEmpty()
+
+        return when (action) {
+
+            /*
+             * Alfa action="list_all"
+             */
+            "list" -> {
+
+                val pageUrl =
+                    if (page <= 1) {
+                        url
+                    } else {
+                        "${url.trimEnd('/')}/page/$page"
+                    }
+
+                val catalog =
+                    PelisForteAdapter.listAll(
+                        api = this,
+                        url = pageUrl,
+                        extra = extra
+                    )
+
+                newHomePageResponse(
+                    listOf(
+                        HomePageList(
+                            name = request.name,
+                            list =
+                                catalog.items.map {
+                                    it.toSearchResponse(
+                                        this
+                                    )
+                                },
+                            isHorizontalImages = true
+                        )
+                    ),
+                    hasNext =
+                        catalog.nextUrl != null
+                )
+            }
+
+            /*
+             * Alfa action="section"
+             */
+            "section" -> {
+
+                val entries =
+                    PelisForteAdapter.section(
+                        url = url,
+                        title = extra
+                    )
+
+                newHomePageResponse(
+                    listOf(
+                        HomePageList(
+                            name = request.name,
+                            list =
+                                entries.map {
+                                    navigationResponse(
+                                        it.title,
+                                        it.url,
+                                        it.extra
+                                    )
+                                },
+                            isHorizontalImages = false
+                        )
+                    ),
+                    hasNext = false
+                )
+            }
+
+            /*
+             * Alfa action="alphabet"
+             */
+            "alphabet" -> {
+
+                val entries =
+                    PelisForteAdapter.alphabet(
+                        url = url,
+                        years =
+                            extra == "years"
+                    )
+
+                newHomePageResponse(
+                    listOf(
+                        HomePageList(
+                            name = request.name,
+                            list =
+                                entries.map {
+                                    navigationResponse(
+                                        it.title,
+                                        it.url,
+                                        it.extra
+                                    )
+                                },
+                            isHorizontalImages = false
+                        )
+                    ),
+                    hasNext = false
+                )
+            }
+
+            else ->
+                newHomePageResponse(
+                    emptyList()
+                )
+        }
     }
 
     /*
-     * search() de Alfa.
+     * Alfa search()
      */
     override suspend fun search(
         query: String
     ): List<SearchResponse> {
 
-        if (query.isBlank()) {
-            return emptyList()
-        }
-
         return PelisForteAdapter.search(
-            this,
-            query
+            api = this,
+            query = query
         )
     }
 
-    /*
-     * En Alfa, list_all() llama:
-     *
-     * tmdb.set_infoLabels(itemlist, True)
-     *
-     * Aquí esos datos ya llegan desde
-     * AlfaTmdbAdapter a MovieDetails.
-     */
     override suspend fun load(
         url: String
     ): LoadResponse? {
 
+        /*
+         * Entrada procedente de section()
+         * o alphabet().
+         *
+         * Al abrirla se ejecuta list_all()
+         * sobre su URL exacta.
+         */
+        if (
+            url.startsWith(
+                "$mainUrl/__patriarcatv/list?"
+            )
+        ) {
+
+            val nav =
+                decodeNavigation(url)
+                    ?: return null
+
+            val catalog =
+                PelisForteAdapter.listAll(
+                    api = this,
+                    url = nav.url,
+                    extra = nav.extra
+                )
+
+            return newMovieLoadResponse(
+                name = nav.title,
+                url = url,
+                type = TvType.Others,
+                data = url
+            ) {
+                comingSoon = true
+
+                recommendations =
+                    catalog.items.map {
+                        it.toSearchResponse(
+                            this@PATRIARCATVProvider
+                        )
+                    }
+            }
+        }
+
+        /*
+         * Película:
+         * findvideos usa esta misma URL
+         * como Item.url en Alfa.
+         */
         val movie =
             PelisForteAdapter.loadMovie(url)
                 ?: return null
@@ -188,12 +319,12 @@ class PATRIARCATVProvider : MainAPI() {
                         val actorName =
                             person.name
                                 .trim()
+                                .takeIf {
+                                    it.isNotBlank()
+                                }
+                                ?: return@mapNotNull null
 
-                        if (actorName.isBlank()) {
-                            return@mapNotNull null
-                        }
-
-                        val actorImage =
+                        val image =
                             person.profilePath
                                 ?.takeIf {
                                     it.isNotBlank()
@@ -216,7 +347,7 @@ class PATRIARCATVProvider : MainAPI() {
                         ActorData(
                             actor = Actor(
                                 name = actorName,
-                                image = actorImage
+                                image = image
                             ),
                             roleString =
                                 person.character
@@ -232,19 +363,11 @@ class PATRIARCATVProvider : MainAPI() {
     }
 
     /*
-     * Equivalente al flujo:
+     * Alfa:
      *
      * findvideos()
      * -> play()
-     * -> servertools.get_servers_itemlist()
-     *
-     * PelisForteAdapter ya:
-     * - lee iframe[data-src]
-     * - aplica ?h= -> r.php?h=
-     * - obtiene servidor
-     * - obtiene idioma
-     * - ordena por idioma/servidor
-     * - sigue la redirección de play()
+     * -> servertools
      */
     override suspend fun loadLinks(
         data: String,
@@ -255,37 +378,39 @@ class PATRIARCATVProvider : MainAPI() {
             (ExtractorLink) -> Unit
     ): Boolean {
 
-        val movie =
-            PelisForteAdapter.loadMovie(data)
-                ?: return false
+        if (
+            data.startsWith(
+                "$mainUrl/__patriarcatv/list?"
+            )
+        ) {
+            return false
+        }
 
-        if (movie.players.isEmpty()) {
+        val players =
+            PelisForteAdapter.findVideos(
+                data
+            )
+
+        if (players.isEmpty()) {
             return false
         }
 
         var found =
             false
 
-        for (player in movie.players) {
+        for (player in players) {
 
             val resolved =
-                PelisForteAdapter.resolvePlayer(
+                PelisForteAdapter.play(
                     player
                 )
                     ?: continue
 
             try {
 
-                /*
-                 * Alfa utiliza la URL del iframe como
-                 * Referer especial para algunos hosts.
-                 *
-                 * En CloudStream el equivalente es
-                 * pasar el referer al extractor.
-                 */
                 loadExtractor(
-                    resolved,
-                    player.url,
+                    resolved.url,
+                    resolved.referer,
                     subtitleCallback,
                     callback
                 )
@@ -297,5 +422,110 @@ class PATRIARCATVProvider : MainAPI() {
         }
 
         return found
+    }
+
+    private fun navigationResponse(
+        title: String,
+        targetUrl: String,
+        extra: String
+    ): SearchResponse {
+
+        val internal =
+            navigationUrl(
+                title = title,
+                url = targetUrl,
+                extra = extra
+            )
+
+        return newMovieSearchResponse(
+            name = title,
+            url = internal,
+            type = TvType.Others
+        )
+    }
+
+    private fun navigationUrl(
+        title: String,
+        url: String,
+        extra: String
+    ): String {
+
+        fun encode(
+            value: String
+        ): String =
+            URLEncoder.encode(
+                value,
+                Charsets.UTF_8.name()
+            )
+
+        return "$mainUrl/__patriarcatv/list" +
+            "?title=${encode(title)}" +
+            "&url=${encode(url)}" +
+            "&extra=${encode(extra)}"
+    }
+
+    private data class NavigationData(
+        val title: String,
+        val url: String,
+        val extra: String
+    )
+
+    private fun decodeNavigation(
+        value: String
+    ): NavigationData? {
+
+        val query =
+            value.substringAfter(
+                "?",
+                ""
+            )
+
+        if (query.isBlank()) {
+            return null
+        }
+
+        val values =
+            query
+                .split("&")
+                .mapNotNull { part ->
+
+                    val key =
+                        part.substringBefore(
+                            "=",
+                            ""
+                        )
+
+                    val rawValue =
+                        part.substringAfter(
+                            "=",
+                            ""
+                        )
+
+                    if (key.isBlank()) {
+                        null
+                    } else {
+                        key to URLDecoder.decode(
+                            rawValue,
+                            Charsets.UTF_8.name()
+                        )
+                    }
+                }
+                .toMap()
+
+        val title =
+            values["title"]
+                ?: return null
+
+        val url =
+            values["url"]
+                ?: return null
+
+        return NavigationData(
+            title = title,
+            url = url,
+            extra =
+                values["extra"]
+                    .orEmpty()
+        )
     }
 }
