@@ -22,14 +22,9 @@ import java.net.URLEncoder
 
 class PATRIARCATVProvider : MainAPI() {
 
-    override var name =
-        "PATRIARCATV"
-
-    override var mainUrl =
-        PelisForteAdapter.BASE_URL
-
-    override var lang =
-        "es"
+    override var name = "PATRIARCATV"
+    override var mainUrl = PelisForteAdapter.BASE_URL
+    override var lang = "es"
 
     override val supportedTypes =
         setOf(
@@ -37,45 +32,17 @@ class PATRIARCATVProvider : MainAPI() {
             TvType.Others
         )
 
-    override val hasMainPage =
-        true
+    override val hasMainPage = true
 
-    /*
-     * mainlist() de Alfa:
-     *
-     * Novedades
-     * Castellano
-     * Latino
-     * VOSE
-     * Generos
-     * Alfabetico
-     * Años
-     *
-     * "Buscar..." corresponde al buscador
-     * nativo de CloudStream -> search().
-     */
     override val mainPage =
         mainPageOf(
-            "list|$mainUrl/pelicula|" to
-                "Novedades",
-
-            "list|$mainUrl/pelis/idiomas/castellano|CAST" to
-                "Castellano",
-
-            "list|$mainUrl/pelis/idiomas/espanol-latino|LAT" to
-                "Latino",
-
-            "list|$mainUrl/pelis/idiomas/subtituladas-p02|VOSE" to
-                "VOSE",
-
-            "section|$mainUrl/pelicula|Generos" to
-                "Generos",
-
-            "alphabet|$mainUrl/pelicula|letters" to
-                "Alfabetico",
-
-            "alphabet|$mainUrl/pelicula|years" to
-                "Años"
+            "list|$mainUrl/pelicula|" to "Novedades",
+            "list|$mainUrl/pelis/idiomas/castellano|CAST" to "Castellano",
+            "list|$mainUrl/pelis/idiomas/espanol-latino|LAT" to "Latino",
+            "list|$mainUrl/pelis/idiomas/subtituladas-p02|VOSE" to "VOSE",
+            "section|$mainUrl/pelicula|Generos" to "Generos",
+            "alphabet|$mainUrl/pelicula|letters" to "Alfabetico",
+            "alphabet|$mainUrl/pelicula|years" to "Años"
         )
 
     override suspend fun getMainPage(
@@ -107,9 +74,6 @@ class PATRIARCATVProvider : MainAPI() {
 
         return when (action) {
 
-            /*
-             * Alfa action="list_all"
-             */
             "list" -> {
 
                 val pageUrl =
@@ -126,16 +90,20 @@ class PATRIARCATVProvider : MainAPI() {
                         extra = extra
                     )
 
+                val results =
+                    catalog.items.map { item ->
+                        PelisForteAdapter.run {
+                            item.toSearchResponse(
+                                this@PATRIARCATVProvider
+                            )
+                        }
+                    }
+
                 newHomePageResponse(
                     listOf(
                         HomePageList(
                             name = request.name,
-                            list =
-                                catalog.items.map {
-                                    it.toSearchResponse(
-                                        this
-                                    )
-                                },
+                            list = results,
                             isHorizontalImages = true
                         )
                     ),
@@ -144,9 +112,6 @@ class PATRIARCATVProvider : MainAPI() {
                 )
             }
 
-            /*
-             * Alfa action="section"
-             */
             "section" -> {
 
                 val entries =
@@ -155,18 +120,20 @@ class PATRIARCATVProvider : MainAPI() {
                         title = extra
                     )
 
+                val results =
+                    entries.map { entry ->
+                        navigationResponse(
+                            title = entry.title,
+                            targetUrl = entry.url,
+                            extra = entry.extra
+                        )
+                    }
+
                 newHomePageResponse(
                     listOf(
                         HomePageList(
                             name = request.name,
-                            list =
-                                entries.map {
-                                    navigationResponse(
-                                        it.title,
-                                        it.url,
-                                        it.extra
-                                    )
-                                },
+                            list = results,
                             isHorizontalImages = false
                         )
                     ),
@@ -174,9 +141,6 @@ class PATRIARCATVProvider : MainAPI() {
                 )
             }
 
-            /*
-             * Alfa action="alphabet"
-             */
             "alphabet" -> {
 
                 val entries =
@@ -186,18 +150,20 @@ class PATRIARCATVProvider : MainAPI() {
                             extra == "years"
                     )
 
+                val results =
+                    entries.map { entry ->
+                        navigationResponse(
+                            title = entry.title,
+                            targetUrl = entry.url,
+                            extra = entry.extra
+                        )
+                    }
+
                 newHomePageResponse(
                     listOf(
                         HomePageList(
                             name = request.name,
-                            list =
-                                entries.map {
-                                    navigationResponse(
-                                        it.title,
-                                        it.url,
-                                        it.extra
-                                    )
-                                },
+                            list = results,
                             isHorizontalImages = false
                         )
                     ),
@@ -212,12 +178,13 @@ class PATRIARCATVProvider : MainAPI() {
         }
     }
 
-    /*
-     * Alfa search()
-     */
     override suspend fun search(
         query: String
     ): List<SearchResponse> {
+
+        if (query.isBlank()) {
+            return emptyList()
+        }
 
         return PelisForteAdapter.search(
             api = this,
@@ -229,13 +196,6 @@ class PATRIARCATVProvider : MainAPI() {
         url: String
     ): LoadResponse? {
 
-        /*
-         * Entrada procedente de section()
-         * o alphabet().
-         *
-         * Al abrirla se ejecuta list_all()
-         * sobre su URL exacta.
-         */
         if (
             url.startsWith(
                 "$mainUrl/__patriarcatv/list?"
@@ -253,6 +213,15 @@ class PATRIARCATVProvider : MainAPI() {
                     extra = nav.extra
                 )
 
+            val results =
+                catalog.items.map { item ->
+                    PelisForteAdapter.run {
+                        item.toSearchResponse(
+                            this@PATRIARCATVProvider
+                        )
+                    }
+                }
+
             return newMovieLoadResponse(
                 name = nav.title,
                 url = url,
@@ -260,21 +229,10 @@ class PATRIARCATVProvider : MainAPI() {
                 data = url
             ) {
                 comingSoon = true
-
-                recommendations =
-                    catalog.items.map {
-                        it.toSearchResponse(
-                            this@PATRIARCATVProvider
-                        )
-                    }
+                recommendations = results
             }
         }
 
-        /*
-         * Película:
-         * findvideos usa esta misma URL
-         * como Item.url en Alfa.
-         */
         val movie =
             PelisForteAdapter.loadMovie(url)
                 ?: return null
@@ -324,30 +282,26 @@ class PATRIARCATVProvider : MainAPI() {
                                 }
                                 ?: return@mapNotNull null
 
-                        val image =
+                        val actorImage =
                             person.profilePath
                                 ?.takeIf {
                                     it.isNotBlank()
                                 }
-                                ?.let {
+                                ?.let { path ->
                                     if (
-                                        it.startsWith(
-                                            "http://"
-                                        ) ||
-                                        it.startsWith(
-                                            "https://"
-                                        )
+                                        path.startsWith("http://") ||
+                                        path.startsWith("https://")
                                     ) {
-                                        it
+                                        path
                                     } else {
-                                        "https://image.tmdb.org/t/p/original$it"
+                                        "https://image.tmdb.org/t/p/original$path"
                                     }
                                 }
 
                         ActorData(
                             actor = Actor(
                                 name = actorName,
-                                image = image
+                                image = actorImage
                             ),
                             roleString =
                                 person.character
@@ -362,13 +316,6 @@ class PATRIARCATVProvider : MainAPI() {
         }
     }
 
-    /*
-     * Alfa:
-     *
-     * findvideos()
-     * -> play()
-     * -> servertools
-     */
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -395,8 +342,7 @@ class PATRIARCATVProvider : MainAPI() {
             return false
         }
 
-        var found =
-            false
+        var found = false
 
         for (player in players) {
 
@@ -407,7 +353,6 @@ class PATRIARCATVProvider : MainAPI() {
                     ?: continue
 
             try {
-
                 loadExtractor(
                     resolved.url,
                     resolved.referer,
@@ -416,7 +361,6 @@ class PATRIARCATVProvider : MainAPI() {
                 )
 
                 found = true
-
             } catch (_: Throwable) {
             }
         }
@@ -430,16 +374,14 @@ class PATRIARCATVProvider : MainAPI() {
         extra: String
     ): SearchResponse {
 
-        val internal =
-            navigationUrl(
-                title = title,
-                url = targetUrl,
-                extra = extra
-            )
-
         return newMovieSearchResponse(
             name = title,
-            url = internal,
+            url =
+                navigationUrl(
+                    title = title,
+                    url = targetUrl,
+                    extra = extra
+                ),
             type = TvType.Others
         )
     }
@@ -516,13 +458,13 @@ class PATRIARCATVProvider : MainAPI() {
             values["title"]
                 ?: return null
 
-        val url =
+        val targetUrl =
             values["url"]
                 ?: return null
 
         return NavigationData(
             title = title,
-            url = url,
+            url = targetUrl,
             extra =
                 values["extra"]
                     .orEmpty()
